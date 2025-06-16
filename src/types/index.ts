@@ -6,6 +6,8 @@ export interface UsageExample {
 }
 
 export interface InstallationInfo {
+  command: string;     // Primary installation command
+  alternatives?: string[]; // Alternative installation methods
   dotnet: string;      // "dotnet add package PackageName"
   packageManager?: string;    // "Install-Package PackageName"
   paket?: string;      // "paket add PackageName"
@@ -91,6 +93,7 @@ export interface PackageReadmeResponse {
   installation: InstallationInfo;
   basic_info: PackageBasicInfo;
   repository?: RepositoryInfo | undefined;
+  exists: boolean;
 }
 
 export interface PackageInfoResponse {
@@ -104,6 +107,7 @@ export interface PackageInfoResponse {
   dev_dependencies?: Record<string, string> | undefined;
   download_stats: DownloadStats;
   repository?: RepositoryInfo | undefined;
+  exists: boolean;
 }
 
 export interface SearchPackagesResponse {

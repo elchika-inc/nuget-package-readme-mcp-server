@@ -19,6 +19,48 @@ export class NuGetApiClient {
     this.timeout = timeout || 30000;
   }
 
+  async checkPackageExists(packageName: string): Promise<boolean> {
+    const url = `${this.registrationBaseUrl}/${packageName.toLowerCase()}/index.json`;
+    
+    return withRetry(async () => {
+      logger.debug(`Checking package existence: ${packageName}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'nuget-package-readme-mcp/1.0.0',
+          },
+        });
+
+        if (response.status === 404) {
+          logger.debug(`Package does not exist: ${packageName}`);
+          return false;
+        }
+
+        if (!response.ok) {
+          handleHttpError(response.status, response, `NuGet registry for package ${packageName}`);
+        }
+
+        logger.debug(`Package exists: ${packageName}`);
+        return true;
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          handleApiError(new Error('Request timeout'), `NuGet registry for package ${packageName}`);
+        }
+        // If there's a network error, we assume the package doesn't exist
+        logger.debug(`Package existence check failed, assuming does not exist: ${packageName}`, { error });
+        return false;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }, 3, 1000, `NuGet registry checkPackageExists(${packageName})`);
+  }
+
   async getPackageVersions(packageName: string): Promise<string[]> {
     const url = `${this.registrationBaseUrl}/${packageName.toLowerCase()}/index.json`;
     

@@ -32,6 +32,42 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
   }
 
   try {
+    // First, check if package exists using direct API call
+    logger.debug(`Checking package existence: ${package_name}`);
+    const packageExists = await nugetApi.checkPackageExists(package_name);
+    
+    if (!packageExists) {
+      logger.warn(`Package not found: ${package_name}`);
+      return {
+        package_name,
+        version: version,
+        description: 'Package not found',
+        readme_content: '',
+        usage_examples: [],
+        installation: {
+          command: `dotnet add package ${package_name}`,
+          alternatives: [
+            `Install-Package ${package_name}`,
+            `paket add ${package_name}`,
+          ],
+          dotnet: `dotnet add package ${package_name}`,
+          packageManager: `Install-Package ${package_name}`,
+          paket: `paket add ${package_name}`,
+        },
+        basic_info: {
+          name: package_name,
+          version: version,
+          description: 'Package not found',
+          license: 'Unknown',
+          authors: [],
+          tags: [],
+        },
+        exists: false,
+      };
+    }
+    
+    logger.debug(`Package exists: ${package_name}`);
+
     // Get package metadata from NuGet API
     const packageMetadata = await nugetApi.getPackageMetadata(package_name, version);
     const actualVersion = packageMetadata.package.metadata.version;
@@ -75,6 +111,11 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
 
     // Create installation info
     const installation: InstallationInfo = {
+      command: `dotnet add package ${package_name}`,
+      alternatives: [
+        `Install-Package ${package_name}`,
+        `paket add ${package_name}`,
+      ],
       dotnet: `dotnet add package ${package_name}`,
       packageManager: `Install-Package ${package_name}`,
       paket: `paket add ${package_name}`,
@@ -114,6 +155,7 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
       installation,
       basic_info: basicInfo,
       repository: repository || undefined,
+      exists: true,
     };
 
     // Cache the response

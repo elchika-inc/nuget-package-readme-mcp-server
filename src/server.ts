@@ -3,6 +3,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ErrorCode,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -40,10 +42,10 @@ const TOOL_DEFINITIONS = {
           type: 'boolean',
           description: 'Whether to include usage examples (default: true)',
           default: true,
-        },
+        }
       },
       required: ['package_name'],
-    },
+    }
   },
   get_package_info: {
     name: 'get_package_info',
@@ -64,10 +66,10 @@ const TOOL_DEFINITIONS = {
           type: 'boolean',
           description: 'Whether to include development dependencies (default: false)',
           default: false,
-        },
+        }
       },
       required: ['package_name'],
-    },
+    }
   },
   search_packages: {
     name: 'search_packages',
@@ -97,10 +99,10 @@ const TOOL_DEFINITIONS = {
           description: 'Minimum popularity score (0-1)',
           minimum: 0,
           maximum: 1,
-        },
+        }
       },
       required: ['query'],
-    },
+    }
   },
 } as const;
 
@@ -116,7 +118,9 @@ export class NuGetPackageReadmeMcpServer {
       {
         capabilities: {
           tools: {},
-        },
+          prompts: {},
+          resources: {}
+        }
       }
     );
 
@@ -125,14 +129,24 @@ export class NuGetPackageReadmeMcpServer {
 
   private setupHandlers(): void {
     // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    (this.server as any).setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: Object.values(TOOL_DEFINITIONS),
-      };
+      }
+    });
+
+    // Handle prompts list
+    (this.server as any).setRequestHandler(ListPromptsRequestSchema, async () => {
+      return { prompts: [] };
+    });
+
+    // Handle resources list
+    (this.server as any).setRequestHandler(ListResourcesRequestSchema, async () => {
+      return { resources: [] };
     });
 
     // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    (this.server as any).setRequestHandler(CallToolRequestSchema, async (request: any, _extra: any) => {
       const { name, arguments: args } = request.params;
       
 
@@ -238,9 +252,9 @@ export class NuGetPackageReadmeMcpServer {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
     };
   }
 
@@ -298,9 +312,9 @@ export class NuGetPackageReadmeMcpServer {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
     };
   }
 
@@ -375,9 +389,9 @@ export class NuGetPackageReadmeMcpServer {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
     };
   }
 
@@ -404,7 +418,7 @@ export class NuGetPackageReadmeMcpServer {
   async run(): Promise<void> {
     try {
       const transport = new StdioServerTransport();
-      await this.server.connect(transport);
+      await (this.server as any).connect(transport);
     } catch (error) {
       logger.error('Failed to start server transport', { error });
       throw error;
@@ -412,7 +426,7 @@ export class NuGetPackageReadmeMcpServer {
   }
 
   async stop(): Promise<void> {
-    await this.server.close();
+    await (this.server as any).close();
   }
 }
 

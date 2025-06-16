@@ -29,6 +29,33 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
   }
 
   try {
+    // First, check if package exists using direct API call
+    logger.debug(`Checking package existence: ${package_name}`);
+    const packageExists = await nugetApi.checkPackageExists(package_name);
+    
+    if (!packageExists) {
+      logger.warn(`Package not found: ${package_name}`);
+      return {
+        package_name,
+        latest_version: 'unknown',
+        description: 'Package not found',
+        authors: [],
+        license: 'Unknown',
+        tags: [],
+        dependencies: undefined,
+        dev_dependencies: undefined,
+        download_stats: {
+          last_day: 0,
+          last_week: 0,
+          last_month: 0,
+        },
+        repository: undefined,
+        exists: false,
+      };
+    }
+    
+    logger.debug(`Package exists: ${package_name}`);
+
     // Get available versions to find the latest
     const versions = await nugetApi.getPackageVersions(package_name);
     if (versions.length === 0) {
@@ -46,12 +73,12 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
 
     // Parse authors
     const authors = packageMetadata.package.metadata.authors 
-      ? packageMetadata.package.metadata.authors.split(',').map(author => author.trim())
+      ? packageMetadata.package.metadata.authors.split(',').map(author => typeof author === 'string' ? author.trim() : '').filter(author => author.length > 0)
       : [];
 
     // Parse tags
     const tags = packageMetadata.package.metadata.tags 
-      ? packageMetadata.package.metadata.tags.split(' ').filter(tag => tag.trim().length > 0)
+      ? packageMetadata.package.metadata.tags.split(' ').filter(tag => typeof tag === 'string' && tag.trim().length > 0)
       : [];
 
     // Extract repository information from project URL
@@ -124,6 +151,7 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
       dev_dependencies: devDependencies || undefined,
       download_stats: downloadStats,
       repository: repository || undefined,
+      exists: true,
     };
 
     // Cache the response
