@@ -1,6 +1,6 @@
 {
   "name": "nuget-package-readme-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for fetching NuGet package README and usage information",
   "type": "module",
   "main": "dist/index.js",
