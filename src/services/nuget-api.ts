@@ -11,6 +11,7 @@ import {
 
 export class NuGetApiClient {
   private readonly registrationBaseUrl = 'https://api.nuget.org/v3-flatcontainer';
+  private readonly registrationApiUrl = 'https://api.nuget.org/v3/registration5-semver1';
   private readonly searchUrl = 'https://azuresearch-usnc.nuget.org/query';
   // private readonly serviceIndexUrl = 'https://api.nuget.org/v3/index.json'; // Currently unused
   private readonly timeout: number;
@@ -271,6 +272,110 @@ export class NuGetApiClient {
         last_month: 0,
       };
     }
+  }
+
+  async getPackageReadme(packageName: string, version: string): Promise<string | null> {
+    // Try to get README content directly from NuGet
+    let actualVersion = version;
+    if (version === 'latest') {
+      const versions = await this.getPackageVersions(packageName);
+      if (versions.length === 0) {
+        return null;
+      }
+      actualVersion = versions[versions.length - 1];
+    }
+
+    const readmeUrl = `${this.registrationBaseUrl}/${packageName.toLowerCase()}/${actualVersion.toLowerCase()}/readme`;
+    
+    return withRetry(async () => {
+      logger.debug(`Attempting to fetch README from NuGet: ${packageName}@${actualVersion}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      
+      try {
+        const response = await fetch(readmeUrl, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'text/plain, text/markdown, */*',
+            'User-Agent': 'nuget-package-readme-mcp/1.0.0',
+          },
+        });
+
+        if (response.status === 404) {
+          logger.debug(`No README found in NuGet package: ${packageName}@${actualVersion}`);
+          return null;
+        }
+
+        if (!response.ok) {
+          logger.debug(`Failed to fetch README from NuGet: ${packageName}@${actualVersion}, status: ${response.status}`);
+          return null;
+        }
+
+        const readmeContent = await response.text();
+        if (readmeContent && readmeContent.trim().length > 0) {
+          logger.debug(`Successfully fetched README from NuGet: ${packageName}@${actualVersion}`);
+          return readmeContent;
+        }
+        
+        return null;
+      } catch (error) {
+        logger.debug(`Failed to fetch README from NuGet: ${packageName}@${actualVersion}`, { error });
+        return null;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }, 1, 0, `NuGet README getPackageReadme(${packageName}, ${actualVersion})`);
+  }
+
+  async getEnhancedPackageMetadata(packageName: string, version: string): Promise<any> {
+    // Try to get enhanced metadata from Registration API
+    let actualVersion = version;
+    if (version === 'latest') {
+      const versions = await this.getPackageVersions(packageName);
+      if (versions.length === 0) {
+        throw new VersionNotFoundError(packageName, version);
+      }
+      actualVersion = versions[versions.length - 1];
+    }
+
+    const registrationUrl = `${this.registrationApiUrl}/${packageName.toLowerCase()}/${actualVersion.toLowerCase()}.json`;
+    
+    return withRetry(async () => {
+      logger.debug(`Fetching enhanced package metadata: ${packageName}@${actualVersion}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      
+      try {
+        const response = await fetch(registrationUrl, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'nuget-package-readme-mcp/1.0.0',
+          },
+        });
+
+        if (response.status === 404) {
+          logger.debug(`Enhanced metadata not available for: ${packageName}@${actualVersion}`);
+          return null;
+        }
+
+        if (!response.ok) {
+          logger.debug(`Failed to fetch enhanced metadata: ${packageName}@${actualVersion}, status: ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json();
+        logger.debug(`Successfully fetched enhanced metadata: ${packageName}@${actualVersion}`);
+        return data;
+      } catch (error) {
+        logger.debug(`Failed to fetch enhanced metadata: ${packageName}@${actualVersion}`, { error });
+        return null;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }, 1, 0, `NuGet Registration getEnhancedPackageMetadata(${packageName}, ${actualVersion})`);
   }
 
   private async parseNuSpec(xmlText: string): Promise<NuSpecPackage> {

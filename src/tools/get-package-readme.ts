@@ -72,12 +72,33 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
     const packageMetadata = await nugetApi.getPackageMetadata(package_name, version);
     const actualVersion = packageMetadata.package.metadata.version;
 
-    // Try to get README content from GitHub repository
+    // Try to get README content - prioritize NuGet registry over GitHub
     let readmeContent = '';
     let readmeSource = 'none';
     let repository: RepositoryInfo | undefined;
 
-    // Create repository info from project URL
+    // First, try to get README directly from NuGet
+    const nugetReadme = await nugetApi.getPackageReadme(package_name, actualVersion);
+    if (nugetReadme) {
+      readmeContent = nugetReadme;
+      readmeSource = 'nuget';
+      logger.debug(`Got README from NuGet registry: ${package_name}`);
+    }
+
+    // If no README from NuGet, try enhanced metadata for richer description
+    if (!readmeContent) {
+      const enhancedMetadata = await nugetApi.getEnhancedPackageMetadata(package_name, actualVersion);
+      if (enhancedMetadata && enhancedMetadata.catalogEntry) {
+        const catalogEntry = enhancedMetadata.catalogEntry;
+        if (catalogEntry.description && catalogEntry.description.length > packageMetadata.package.metadata.description?.length) {
+          readmeContent = createEnhancedFallbackReadme(packageMetadata, catalogEntry);
+          readmeSource = 'nuget-enhanced';
+          logger.debug(`Created enhanced README from NuGet metadata: ${package_name}`);
+        }
+      }
+    }
+
+    // Create repository info from project URL for fallback
     if (packageMetadata.package.metadata.projectUrl) {
       const projectUrl = packageMetadata.package.metadata.projectUrl;
       if (projectUrl.includes('github.com')) {
@@ -86,12 +107,14 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
           url: projectUrl,
         };
 
-        // Try to get README from GitHub
-        const githubReadme = await githubApi.getReadmeFromRepository(repository);
-        if (githubReadme) {
-          readmeContent = githubReadme;
-          readmeSource = 'github';
-          logger.debug(`Got README from GitHub: ${package_name}`);
+        // Only try GitHub if we don't have good content from NuGet
+        if (!readmeContent) {
+          const githubReadme = await githubApi.getReadmeFromRepository(repository);
+          if (githubReadme) {
+            readmeContent = githubReadme;
+            readmeSource = 'github';
+            logger.debug(`Got README from GitHub: ${package_name}`);
+          }
         }
       }
     }
@@ -168,6 +191,55 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
     logger.error(`Failed to fetch package README: ${package_name}@${version}`, { error });
     throw error;
   }
+}
+
+function createEnhancedFallbackReadme(packageMetadata: any, catalogEntry: any): string {
+  const metadata = packageMetadata.package.metadata;
+  
+  let readme = `# ${metadata.title || metadata.id}\n\n`;
+  
+  // Use enhanced description if available and longer
+  const description = catalogEntry.description || metadata.description;
+  if (description) {
+    readme += `${description}\n\n`;
+  }
+  
+  // Add summary if different from description
+  if (catalogEntry.summary && catalogEntry.summary !== description) {
+    readme += `## Summary\n\n${catalogEntry.summary}\n\n`;
+  }
+  
+  // Add release notes if available
+  if (catalogEntry.releaseNotes) {
+    readme += `## Release Notes\n\n${catalogEntry.releaseNotes}\n\n`;
+  }
+  
+  if (metadata.authors) {
+    readme += `**Authors:** ${metadata.authors}\n\n`;
+  }
+  
+  if (metadata.tags) {
+    const tags = metadata.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
+    if (tags.length > 0) {
+      readme += `**Tags:** ${tags.join(', ')}\n\n`;
+    }
+  }
+  
+  readme += `## Installation\n\n`;
+  readme += `\`\`\`bash\n`;
+  readme += `dotnet add package ${metadata.id}\n`;
+  readme += `\`\`\`\n\n`;
+  
+  readme += `Or via Package Manager Console:\n\n`;
+  readme += `\`\`\`powershell\n`;
+  readme += `Install-Package ${metadata.id}\n`;
+  readme += `\`\`\`\n\n`;
+  
+  if (metadata.projectUrl) {
+    readme += `For more information, visit the [project page](${metadata.projectUrl}).\n\n`;
+  }
+  
+  return readme;
 }
 
 function createFallbackReadme(packageMetadata: any): string {
