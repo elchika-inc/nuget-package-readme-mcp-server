@@ -1,44 +1,63 @@
 {
-  "name": "nuget-package-readme-mcp-server",
+  "name": "@elchika-inc/nuget-package-readme-mcp-server",
   "version": "0.1.2",
   "description": "MCP server for fetching NuGet package README and usage information",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "nuget-package-readme-mcp-server": "dist/index.js"
+    "nuget-package-readme-mcp-server": "dist/src/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "jest",
-    "lint": "eslint src/**/*.ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "bun run src/index.ts",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "npm:publish": "npm publish --access public",
+    "prepublishOnly": "bun run clean && bun run build"
   },
   "keywords": [
     "mcp",
     "nuget",
+    "dotnet",
+    "csharp",
     "readme",
     "package",
     "documentation",
-    "dotnet",
-    "csharp"
+    "model-context-protocol"
   ],
   "author": "naoto24kawa",
   "license": "MIT",
+  "homepage": "https://github.com/elchika-inc/package-readme-mcp-servers#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elchika-inc/package-readme-mcp-servers.git",
+    "directory": "nuget-package-readme-mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/elchika-inc/package-readme-mcp-servers/issues"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.5.0"
+    "@modelcontextprotocol/sdk": "^0.6.1"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
-    "jest": "^29.0.0",
+    "@types/bun": "^1.0.0",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "vitest": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.5.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
   }
 }
