@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js';
 import { handleApiError, handleHttpError, withRetry } from '../utils/error-handler.js';
+import { NuSpecParser } from '../utils/nuspec-parser.js';
 import type { 
   NuGetSearchResponse, 
   NuGetDownloadStats,
@@ -9,15 +10,18 @@ import {
   VersionNotFoundError,
 } from '../types/index.js';
 
+const DEFAULT_TIMEOUT = 30000;
+const RETRY_ATTEMPTS = 3;
+const BASE_RETRY_DELAY = 1000;
+
 export class NuGetApiClient {
   private readonly registrationBaseUrl = 'https://api.nuget.org/v3-flatcontainer';
   private readonly registrationApiUrl = 'https://api.nuget.org/v3/registration5-semver1';
   private readonly searchUrl = 'https://azuresearch-usnc.nuget.org/query';
-  // private readonly serviceIndexUrl = 'https://api.nuget.org/v3/index.json'; // Currently unused
   private readonly timeout: number;
 
   constructor(timeout?: number) {
-    this.timeout = timeout || 30000;
+    this.timeout = timeout || DEFAULT_TIMEOUT;
   }
 
   async checkPackageExists(packageName: string): Promise<boolean> {
@@ -59,7 +63,7 @@ export class NuGetApiClient {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, 3, 1000, `NuGet registry checkPackageExists(${packageName})`);
+    }, RETRY_ATTEMPTS, BASE_RETRY_DELAY, `NuGet registry checkPackageExists(${packageName})`);
   }
 
   async getPackageVersions(packageName: string): Promise<string[]> {
@@ -95,7 +99,7 @@ export class NuGetApiClient {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, 3, 1000, `NuGet registry getPackageVersions(${packageName})`);
+    }, RETRY_ATTEMPTS, BASE_RETRY_DELAY, `NuGet registry getPackageVersions(${packageName})`);
   }
 
   async getPackageMetadata(packageName: string, version: string): Promise<NuSpecPackage> {
@@ -131,7 +135,7 @@ export class NuGetApiClient {
         }
 
         const xmlText = await response.text();
-        const parsed = await this.parseNuSpec(xmlText);
+        const parsed = await NuSpecParser.parseNuSpec(xmlText);
         logger.debug(`Successfully fetched package metadata: ${packageName}@${actualVersion}`);
         return parsed;
       } catch (error) {
@@ -142,7 +146,7 @@ export class NuGetApiClient {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, 3, 1000, `NuGet registry getPackageMetadata(${packageName}, ${actualVersion})`);
+    }, RETRY_ATTEMPTS, BASE_RETRY_DELAY, `NuGet registry getPackageMetadata(${packageName}, ${actualVersion})`);
   }
 
   async searchPackages(
@@ -191,7 +195,7 @@ export class NuGetApiClient {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, 3, 1000, `NuGet registry searchPackages(${query})`);
+    }, RETRY_ATTEMPTS, BASE_RETRY_DELAY, `NuGet registry searchPackages(${query})`);
   }
 
   async getDownloadStats(packageName: string): Promise<NuGetDownloadStats> {
@@ -245,7 +249,7 @@ export class NuGetApiClient {
       } finally {
         clearTimeout(timeoutId);
       }
-    }, 3, 1000, `NuGet registry getDownloadStats(${packageName})`);
+    }, RETRY_ATTEMPTS, BASE_RETRY_DELAY, `NuGet registry getDownloadStats(${packageName})`);
   }
 
   async getAllDownloadStats(packageName: string): Promise<{
@@ -378,76 +382,6 @@ export class NuGetApiClient {
     }, 1, 0, `NuGet Registration getEnhancedPackageMetadata(${packageName}, ${actualVersion})`);
   }
 
-  private async parseNuSpec(xmlText: string): Promise<NuSpecPackage> {
-    // Simple XML parsing for NuSpec files
-    // In a production environment, you might want to use a proper XML parser
-    try {
-      // Extract basic metadata using regex patterns
-      const getId = (xml: string): string => {
-        const match = xml.match(/<id>([^<]+)<\/id>/i);
-        return match ? match[1].trim() : '';
-      };
-
-      const getVersion = (xml: string): string => {
-        const match = xml.match(/<version>([^<]+)<\/version>/i);
-        return match ? match[1].trim() : '';
-      };
-
-      const getDescription = (xml: string): string => {
-        const match = xml.match(/<description>([^<]+)<\/description>/i);
-        return match ? match[1].trim() : '';
-      };
-
-      const getAuthors = (xml: string): string => {
-        const match = xml.match(/<authors>([^<]+)<\/authors>/i);
-        return match ? match[1].trim() : '';
-      };
-
-      const getLicense = (xml: string): string => {
-        const licenseMatch = xml.match(/<license[^>]*>([^<]+)<\/license>/i);
-        const licenseUrlMatch = xml.match(/<licenseUrl>([^<]+)<\/licenseUrl>/i);
-        const licenseExpressionMatch = xml.match(/<licenseExpression>([^<]+)<\/licenseExpression>/i);
-        
-        return licenseExpressionMatch?.[1] || licenseMatch?.[1] || licenseUrlMatch?.[1] || 'Unknown';
-      };
-
-      const getTags = (xml: string): string => {
-        const match = xml.match(/<tags>([^<]+)<\/tags>/i);
-        return match ? match[1].trim() : '';
-      };
-
-      const getProjectUrl = (xml: string): string | undefined => {
-        const match = xml.match(/<projectUrl>([^<]+)<\/projectUrl>/i);
-        return match ? match[1].trim() : undefined;
-      };
-
-      const getTitle = (xml: string): string | undefined => {
-        const match = xml.match(/<title>([^<]+)<\/title>/i);
-        return match ? match[1].trim() : undefined;
-      };
-
-      // Create a simplified NuSpec structure
-      const nuspec: NuSpecPackage = {
-        package: {
-          metadata: {
-            id: getId(xmlText),
-            version: getVersion(xmlText),
-            title: getTitle(xmlText),
-            authors: getAuthors(xmlText),
-            description: getDescription(xmlText),
-            tags: getTags(xmlText),
-            projectUrl: getProjectUrl(xmlText),
-            licenseExpression: getLicense(xmlText),
-          },
-        },
-      };
-
-      return nuspec;
-    } catch (error) {
-      logger.error('Failed to parse NuSpec XML', { error });
-      throw new Error('Failed to parse package metadata');
-    }
-  }
 }
 
 export const nugetApi = new NuGetApiClient();

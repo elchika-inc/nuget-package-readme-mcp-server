@@ -1,5 +1,12 @@
 import { PackageReadmeMcpError } from '../types/index.js';
 
+const MAX_PACKAGE_NAME_LENGTH = 100;
+const MAX_SEARCH_QUERY_LENGTH = 250;
+const MIN_LIMIT = 1;
+const MAX_LIMIT = 250;
+const MIN_SCORE = 0;
+const MAX_SCORE = 1;
+
 export function validatePackageName(packageName: string): void {
   if (!packageName || typeof packageName !== 'string') {
     throw new PackageReadmeMcpError('Package name is required and must be a string', 'INVALID_PACKAGE_NAME');
@@ -10,8 +17,8 @@ export function validatePackageName(packageName: string): void {
     throw new PackageReadmeMcpError('Package name cannot be empty', 'INVALID_PACKAGE_NAME');
   }
 
-  if (trimmed.length > 100) {
-    throw new PackageReadmeMcpError('Package name cannot exceed 100 characters', 'INVALID_PACKAGE_NAME');
+  if (trimmed.length > MAX_PACKAGE_NAME_LENGTH) {
+    throw new PackageReadmeMcpError(`Package name cannot exceed ${MAX_PACKAGE_NAME_LENGTH} characters`, 'INVALID_PACKAGE_NAME');
   }
 
   // NuGet package name validation rules
@@ -64,19 +71,19 @@ export function validateSearchQuery(query: string): void {
     throw new PackageReadmeMcpError('Search query cannot be empty', 'INVALID_SEARCH_QUERY');
   }
 
-  if (trimmed.length > 250) {
-    throw new PackageReadmeMcpError('Search query cannot exceed 250 characters', 'INVALID_SEARCH_QUERY');
+  if (trimmed.length > MAX_SEARCH_QUERY_LENGTH) {
+    throw new PackageReadmeMcpError(`Search query cannot exceed ${MAX_SEARCH_QUERY_LENGTH} characters`, 'INVALID_SEARCH_QUERY');
   }
 }
 
 export function validateLimit(limit: number): void {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 250) {
-    throw new PackageReadmeMcpError('Limit must be an integer between 1 and 250', 'INVALID_LIMIT');
+  if (!Number.isInteger(limit) || limit < MIN_LIMIT || limit > MAX_LIMIT) {
+    throw new PackageReadmeMcpError(`Limit must be an integer between ${MIN_LIMIT} and ${MAX_LIMIT}`, 'INVALID_LIMIT');
   }
 }
 
 export function validateScore(score: number, name: string): void {
-  if (typeof score !== 'number' || score < 0 || score > 1) {
-    throw new PackageReadmeMcpError(`${name} must be a number between 0 and 1`, 'INVALID_SCORE');
+  if (typeof score !== 'number' || score < MIN_SCORE || score > MAX_SCORE) {
+    throw new PackageReadmeMcpError(`${name} must be a number between ${MIN_SCORE} and ${MAX_SCORE}`, 'INVALID_SCORE');
   }
 }

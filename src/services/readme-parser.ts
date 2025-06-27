@@ -10,6 +10,11 @@ export class ReadmeParser {
   ];
 
   private static readonly CODE_BLOCK_PATTERN = /```(\w+)?\n([\s\S]*?)```/g;
+  private static readonly MAX_EXAMPLES = 10;
+  private static readonly MIN_DESCRIPTION_LENGTH = 10;
+  private static readonly MAX_DESCRIPTION_LENGTH = 200;
+  private static readonly MAX_PARAGRAPH_LENGTH = 300;
+  private static readonly MIN_MEANINGFUL_TEXT_LENGTH = 20;
 
   parseUsageExamples(readmeContent: string, includeExamples: boolean = true): UsageExample[] {
     if (!includeExamples || !readmeContent) {
@@ -29,7 +34,7 @@ export class ReadmeParser {
       const uniqueExamples = this.deduplicateExamples(examples);
       
       // Limit to reasonable number
-      const limitedExamples = uniqueExamples.slice(0, 10);
+      const limitedExamples = uniqueExamples.slice(0, ReadmeParser.MAX_EXAMPLES);
 
       logger.debug(`Extracted ${limitedExamples.length} usage examples from README`);
       return limitedExamples;
@@ -179,7 +184,9 @@ export class ReadmeParser {
       }
       
       // If it's a reasonable length and doesn't look like code, use it as description
-      if (trimmed.length > 10 && trimmed.length < 200 && !this.looksLikeCode(trimmed)) {
+      if (trimmed.length > ReadmeParser.MIN_DESCRIPTION_LENGTH && 
+          trimmed.length < ReadmeParser.MAX_DESCRIPTION_LENGTH && 
+          !this.looksLikeCode(trimmed)) {
         return trimmed.replace(/^[*-]\s*/, ''); // Remove bullet points
       }
       
@@ -291,13 +298,13 @@ export class ReadmeParser {
         }
 
         // This looks like a description
-        if (trimmed.length > 20) {
+        if (trimmed.length > ReadmeParser.MIN_MEANINGFUL_TEXT_LENGTH) {
           if (!foundDescription) {
             description = trimmed;
             foundDescription = true;
           } else {
             // Add continuation if it's part of the same paragraph
-            if (description.length + trimmed.length < 300) {
+            if (description.length + trimmed.length < ReadmeParser.MAX_PARAGRAPH_LENGTH) {
               description += ' ' + trimmed;
             } else {
               break;

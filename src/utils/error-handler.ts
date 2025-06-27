@@ -1,10 +1,4 @@
 import { logger } from './logger.js';
-// import type {
-//   PackageReadmeMcpError,
-//   PackageNotFoundError,
-//   RateLimitError,
-//   NetworkError,
-// } from '../types/index.js';
 import {
   PackageReadmeMcpError as PackageReadmeMcpErrorClass,
   PackageNotFoundError as PackageNotFoundErrorClass,

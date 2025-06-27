@@ -4,6 +4,7 @@ import { cache, createCacheKey } from '../services/cache.js';
 import { nugetApi } from '../services/nuget-api.js';
 import { githubApi } from '../services/github-api.js';
 import { readmeParser } from '../services/readme-parser.js';
+import { ReadmeGenerator } from '../services/readme-generator.js';
 import type {
   GetPackageReadmeParams,
   PackageReadmeResponse,
@@ -91,7 +92,7 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
       if (enhancedMetadata && enhancedMetadata.catalogEntry) {
         const catalogEntry = enhancedMetadata.catalogEntry;
         if (catalogEntry.description && catalogEntry.description.length > packageMetadata.package.metadata.description?.length) {
-          readmeContent = createEnhancedFallbackReadme(packageMetadata, catalogEntry);
+          readmeContent = ReadmeGenerator.createEnhancedFallbackReadme(packageMetadata, catalogEntry);
           readmeSource = 'nuget-enhanced';
           logger.debug(`Created enhanced README from NuGet metadata: ${package_name}`);
         }
@@ -121,7 +122,7 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
 
     // If no README found, create a basic description from package metadata
     if (!readmeContent) {
-      readmeContent = createFallbackReadme(packageMetadata);
+      readmeContent = ReadmeGenerator.createFallbackReadme(packageMetadata);
       readmeSource = 'generated';
       logger.debug(`Generated README from package metadata: ${package_name}`);
     }
@@ -193,88 +194,3 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
   }
 }
 
-function createEnhancedFallbackReadme(packageMetadata: any, catalogEntry: any): string {
-  const metadata = packageMetadata.package.metadata;
-  
-  let readme = `# ${metadata.title || metadata.id}\n\n`;
-  
-  // Use enhanced description if available and longer
-  const description = catalogEntry.description || metadata.description;
-  if (description) {
-    readme += `${description}\n\n`;
-  }
-  
-  // Add summary if different from description
-  if (catalogEntry.summary && catalogEntry.summary !== description) {
-    readme += `## Summary\n\n${catalogEntry.summary}\n\n`;
-  }
-  
-  // Add release notes if available
-  if (catalogEntry.releaseNotes) {
-    readme += `## Release Notes\n\n${catalogEntry.releaseNotes}\n\n`;
-  }
-  
-  if (metadata.authors) {
-    readme += `**Authors:** ${metadata.authors}\n\n`;
-  }
-  
-  if (metadata.tags) {
-    const tags = metadata.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
-    if (tags.length > 0) {
-      readme += `**Tags:** ${tags.join(', ')}\n\n`;
-    }
-  }
-  
-  readme += `## Installation\n\n`;
-  readme += `\`\`\`bash\n`;
-  readme += `dotnet add package ${metadata.id}\n`;
-  readme += `\`\`\`\n\n`;
-  
-  readme += `Or via Package Manager Console:\n\n`;
-  readme += `\`\`\`powershell\n`;
-  readme += `Install-Package ${metadata.id}\n`;
-  readme += `\`\`\`\n\n`;
-  
-  if (metadata.projectUrl) {
-    readme += `For more information, visit the [project page](${metadata.projectUrl}).\n\n`;
-  }
-  
-  return readme;
-}
-
-function createFallbackReadme(packageMetadata: any): string {
-  const metadata = packageMetadata.package.metadata;
-  
-  let readme = `# ${metadata.title || metadata.id}\n\n`;
-  
-  if (metadata.description) {
-    readme += `${metadata.description}\n\n`;
-  }
-  
-  if (metadata.authors) {
-    readme += `**Authors:** ${metadata.authors}\n\n`;
-  }
-  
-  if (metadata.tags) {
-    const tags = metadata.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
-    if (tags.length > 0) {
-      readme += `**Tags:** ${tags.join(', ')}\n\n`;
-    }
-  }
-  
-  readme += `## Installation\n\n`;
-  readme += `\`\`\`bash\n`;
-  readme += `dotnet add package ${metadata.id}\n`;
-  readme += `\`\`\`\n\n`;
-  
-  readme += `Or via Package Manager Console:\n\n`;
-  readme += `\`\`\`powershell\n`;
-  readme += `Install-Package ${metadata.id}\n`;
-  readme += `\`\`\`\n\n`;
-  
-  if (metadata.projectUrl) {
-    readme += `For more information, visit the [project page](${metadata.projectUrl}).\n\n`;
-  }
-  
-  return readme;
-}
