@@ -1,9 +1,9 @@
 import { logger } from '../utils/logger.js';
 import { validatePackageName, validateVersion } from '../utils/validators.js';
 import { cache, createCacheKey } from '../services/cache.js';
-import { nugetApi } from '../services/nuget-api.js';
+import { nugetApi } from '../services/nuget-unified-api.js';
 import { githubApi } from '../services/github-api.js';
-import { readmeParser } from '../services/readme-parser.js';
+import { ReadmeParser } from '../services/readme-parser-unified.js';
 import { ReadmeGenerator } from '../services/readme-generator.js';
 import type {
   GetPackageReadmeParams,
@@ -11,7 +11,147 @@ import type {
   InstallationInfo,
   PackageBasicInfo,
   RepositoryInfo,
+  NuSpecPackage,
 } from '../types/index.js';
+
+interface ReadmeResult {
+  content: string;
+  source: string;
+  repository?: RepositoryInfo;
+}
+
+function createNotFoundResponse(packageName: string, version: string): PackageReadmeResponse {
+  return {
+    package_name: packageName,
+    version: version,
+    description: 'Package not found',
+    readme_content: '',
+    usage_examples: [],
+    installation: createInstallationInfo(packageName),
+    basic_info: {
+      name: packageName,
+      version: version,
+      description: 'Package not found',
+      license: 'Unknown',
+      authors: [],
+      tags: [],
+    },
+    exists: false,
+  };
+}
+
+function createInstallationInfo(packageName: string): InstallationInfo {
+  return {
+    command: `dotnet add package ${packageName}`,
+    alternatives: [
+      `Install-Package ${packageName}`,
+      `paket add ${packageName}`,
+    ],
+    dotnet: `dotnet add package ${packageName}`,
+    packageManager: `Install-Package ${packageName}`,
+    paket: `paket add ${packageName}`,
+  };
+}
+
+async function getReadmeContent(packageName: string, version: string, packageMetadata: NuSpecPackage): Promise<ReadmeResult> {
+  let readmeContent = '';
+  let readmeSource = 'none';
+  let repository: RepositoryInfo | undefined;
+
+  // First, try to get README directly from NuGet
+  const nugetReadme = await nugetApi.getPackageReadme(packageName, version);
+  if (nugetReadme) {
+    readmeContent = nugetReadme;
+    readmeSource = 'nuget';
+    logger.debug(`Got README from NuGet registry: ${packageName}`);
+    return { content: readmeContent, source: readmeSource, repository };
+  }
+
+  // Try enhanced metadata for richer description
+  const enhancedMetadata = await nugetApi.getEnhancedPackageMetadata(packageName, version);
+  if (enhancedMetadata) {
+    const description = enhancedMetadata.description || enhancedMetadata.summary;
+    if (description && description.length > (packageMetadata.package.metadata.description?.length || 0)) {
+      readmeContent = ReadmeGenerator.createEnhancedFallbackReadme(packageMetadata, enhancedMetadata);
+      readmeSource = 'nuget-enhanced';
+      logger.debug(`Created enhanced README from NuGet metadata: ${packageName}`);
+      return { content: readmeContent, source: readmeSource, repository };
+    }
+  }
+
+  // Try GitHub as fallback
+  if (packageMetadata.package.metadata.projectUrl?.includes('github.com')) {
+    repository = {
+      type: 'git',
+      url: packageMetadata.package.metadata.projectUrl,
+    };
+
+    const githubReadme = await githubApi.getReadmeFromRepository(repository);
+    if (githubReadme) {
+      readmeContent = githubReadme;
+      readmeSource = 'github';
+      logger.debug(`Got README from GitHub: ${packageName}`);
+      return { content: readmeContent, source: readmeSource, repository };
+    }
+  }
+
+  // Generate fallback README
+  readmeContent = ReadmeGenerator.createFallbackReadme(packageMetadata);
+  readmeSource = 'generated';
+  logger.debug(`Generated README from package metadata: ${packageName}`);
+  
+  return { content: readmeContent, source: readmeSource, repository };
+}
+
+function createBasicInfo(packageMetadata: NuSpecPackage, actualVersion: string): PackageBasicInfo {
+  const metadata = packageMetadata.package.metadata;
+  
+  const parsedTags = metadata.tags 
+    ? metadata.tags.split(' ').filter(tag => tag.trim().length > 0)
+    : [];
+
+  const parsedAuthors = metadata.authors 
+    ? metadata.authors.split(',').map(author => author.trim())
+    : [];
+
+  return {
+    name: metadata.id,
+    version: actualVersion,
+    description: metadata.description || 'No description available',
+    title: metadata.title || undefined,
+    homepage: metadata.projectUrl || undefined,
+    projectUrl: metadata.projectUrl || undefined,
+    license: metadata.licenseExpression || 'Unknown',
+    licenseUrl: metadata.licenseUrl || undefined,
+    authors: parsedAuthors,
+    tags: parsedTags,
+  };
+}
+
+function buildResponse(
+  packageName: string,
+  actualVersion: string,
+  readmeResult: ReadmeResult,
+  packageMetadata: NuSpecPackage,
+  includeExamples: boolean
+): PackageReadmeResponse {
+  const cleanedReadme = ReadmeParser.cleanMarkdown(readmeResult.content);
+  const usageExamples = ReadmeParser.parseUsageExamples(readmeResult.content, includeExamples);
+  const installation = createInstallationInfo(packageName);
+  const basicInfo = createBasicInfo(packageMetadata, actualVersion);
+
+  return {
+    package_name: packageName,
+    version: actualVersion,
+    description: basicInfo.description,
+    readme_content: cleanedReadme,
+    usage_examples: usageExamples,
+    installation,
+    basic_info: basicInfo,
+    repository: readmeResult.repository || undefined,
+    exists: true,
+  };
+}
 
 export async function getPackageReadme(params: GetPackageReadmeParams): Promise<PackageReadmeResponse> {
   const { package_name, version = 'latest', include_examples = true } = params;
@@ -33,159 +173,30 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
   }
 
   try {
-    // First, check if package exists using direct API call
+    // Check if package exists
     logger.debug(`Checking package existence: ${package_name}`);
     const packageExists = await nugetApi.checkPackageExists(package_name);
     
     if (!packageExists) {
       logger.warn(`Package not found: ${package_name}`);
-      return {
-        package_name,
-        version: version,
-        description: 'Package not found',
-        readme_content: '',
-        usage_examples: [],
-        installation: {
-          command: `dotnet add package ${package_name}`,
-          alternatives: [
-            `Install-Package ${package_name}`,
-            `paket add ${package_name}`,
-          ],
-          dotnet: `dotnet add package ${package_name}`,
-          packageManager: `Install-Package ${package_name}`,
-          paket: `paket add ${package_name}`,
-        },
-        basic_info: {
-          name: package_name,
-          version: version,
-          description: 'Package not found',
-          license: 'Unknown',
-          authors: [],
-          tags: [],
-        },
-        exists: false,
-      };
+      return createNotFoundResponse(package_name, version);
     }
     
     logger.debug(`Package exists: ${package_name}`);
 
-    // Get package metadata from NuGet API
+    // Get package metadata
     const packageMetadata = await nugetApi.getPackageMetadata(package_name, version);
     const actualVersion = packageMetadata.package.metadata.version;
 
-    // Try to get README content - prioritize NuGet registry over GitHub
-    let readmeContent = '';
-    let readmeSource = 'none';
-    let repository: RepositoryInfo | undefined;
+    // Get README content from various sources
+    const readmeResult = await getReadmeContent(package_name, actualVersion, packageMetadata);
 
-    // First, try to get README directly from NuGet
-    const nugetReadme = await nugetApi.getPackageReadme(package_name, actualVersion);
-    if (nugetReadme) {
-      readmeContent = nugetReadme;
-      readmeSource = 'nuget';
-      logger.debug(`Got README from NuGet registry: ${package_name}`);
-    }
-
-    // If no README from NuGet, try enhanced metadata for richer description
-    if (!readmeContent) {
-      const enhancedMetadata = await nugetApi.getEnhancedPackageMetadata(package_name, actualVersion);
-      if (enhancedMetadata && enhancedMetadata.catalogEntry) {
-        const catalogEntry = enhancedMetadata.catalogEntry;
-        if (catalogEntry.description && catalogEntry.description.length > packageMetadata.package.metadata.description?.length) {
-          readmeContent = ReadmeGenerator.createEnhancedFallbackReadme(packageMetadata, catalogEntry);
-          readmeSource = 'nuget-enhanced';
-          logger.debug(`Created enhanced README from NuGet metadata: ${package_name}`);
-        }
-      }
-    }
-
-    // Create repository info from project URL for fallback
-    if (packageMetadata.package.metadata.projectUrl) {
-      const projectUrl = packageMetadata.package.metadata.projectUrl;
-      if (projectUrl.includes('github.com')) {
-        repository = {
-          type: 'git',
-          url: projectUrl,
-        };
-
-        // Only try GitHub if we don't have good content from NuGet
-        if (!readmeContent) {
-          const githubReadme = await githubApi.getReadmeFromRepository(repository);
-          if (githubReadme) {
-            readmeContent = githubReadme;
-            readmeSource = 'github';
-            logger.debug(`Got README from GitHub: ${package_name}`);
-          }
-        }
-      }
-    }
-
-    // If no README found, create a basic description from package metadata
-    if (!readmeContent) {
-      readmeContent = ReadmeGenerator.createFallbackReadme(packageMetadata);
-      readmeSource = 'generated';
-      logger.debug(`Generated README from package metadata: ${package_name}`);
-    }
-
-    // Clean and process README content
-    const cleanedReadme = readmeParser.cleanMarkdown(readmeContent);
+    // Build and cache response
+    const response = buildResponse(package_name, actualVersion, readmeResult, packageMetadata, include_examples);
     
-    // Extract usage examples
-    const usageExamples = readmeParser.parseUsageExamples(readmeContent, include_examples);
-
-    // Create installation info
-    const installation: InstallationInfo = {
-      command: `dotnet add package ${package_name}`,
-      alternatives: [
-        `Install-Package ${package_name}`,
-        `paket add ${package_name}`,
-      ],
-      dotnet: `dotnet add package ${package_name}`,
-      packageManager: `Install-Package ${package_name}`,
-      paket: `paket add ${package_name}`,
-    };
-
-    // Parse tags from the metadata
-    const tags = packageMetadata.package.metadata.tags 
-      ? packageMetadata.package.metadata.tags.split(' ').filter(tag => tag.trim().length > 0)
-      : [];
-
-    // Parse authors
-    const authors = packageMetadata.package.metadata.authors 
-      ? packageMetadata.package.metadata.authors.split(',').map(author => author.trim())
-      : [];
-
-    // Create basic info
-    const basicInfo: PackageBasicInfo = {
-      name: packageMetadata.package.metadata.id,
-      version: actualVersion,
-      description: packageMetadata.package.metadata.description || 'No description available',
-      title: packageMetadata.package.metadata.title || undefined,
-      homepage: packageMetadata.package.metadata.projectUrl || undefined,
-      projectUrl: packageMetadata.package.metadata.projectUrl || undefined,
-      license: packageMetadata.package.metadata.licenseExpression || 'Unknown',
-      licenseUrl: packageMetadata.package.metadata.licenseUrl || undefined,
-      authors,
-      tags,
-    };
-
-    // Create response
-    const response: PackageReadmeResponse = {
-      package_name,
-      version: actualVersion,
-      description: basicInfo.description,
-      readme_content: cleanedReadme,
-      usage_examples: usageExamples,
-      installation,
-      basic_info: basicInfo,
-      repository: repository || undefined,
-      exists: true,
-    };
-
-    // Cache the response
     cache.set(cacheKey, response);
 
-    logger.info(`Successfully fetched package README: ${package_name}@${actualVersion} (README source: ${readmeSource})`);
+    logger.info(`Successfully fetched package README: ${package_name}@${actualVersion} (README source: ${readmeResult.source})`);
     return response;
 
   } catch (error) {
@@ -193,4 +204,3 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
     throw error;
   }
 }
-

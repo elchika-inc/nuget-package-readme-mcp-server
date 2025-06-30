@@ -1,15 +1,16 @@
 import { logger } from '../utils/logger.js';
 import { handleApiError, handleHttpError, withRetry } from '../utils/error-handler.js';
+import { GITHUB_CONFIG } from '../config/constants.js';
 import type { RepositoryInfo } from '../types/index.js';
 
 export class GitHubApiClient {
-  private readonly baseUrl = 'https://api.github.com';
+  private readonly baseUrl = GITHUB_CONFIG.BASE_URL;
   private readonly token?: string | undefined;
   private readonly timeout: number;
 
   constructor(token?: string, timeout?: number) {
-    this.token = token;
-    this.timeout = timeout || 30000;
+    this.token = token || GITHUB_CONFIG.TOKEN;
+    this.timeout = timeout || GITHUB_CONFIG.TIMEOUT;
     
     if (!this.token) {
       logger.warn('GitHub token not provided. Rate limits will be lower.');
@@ -28,7 +29,7 @@ export class GitHubApiClient {
       try {
         const headers: Record<string, string> = {
           'Accept': 'application/vnd.github.v3.raw',
-          'User-Agent': 'nuget-package-readme-mcp/1.0.0',
+          'User-Agent': GITHUB_CONFIG.USER_AGENT,
         };
 
         if (this.token) {

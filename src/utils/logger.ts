@@ -75,4 +75,15 @@ class Logger {
   }
 }
 
-export const logger = new Logger(LogLevel.WARN);
+const getLogLevelFromEnv = (): LogLevel => {
+  const level = process.env.LOG_LEVEL?.toUpperCase();
+  switch (level) {
+    case 'ERROR': return LogLevel.ERROR;
+    case 'WARN': return LogLevel.WARN;
+    case 'INFO': return LogLevel.INFO;
+    case 'DEBUG': return LogLevel.DEBUG;
+    default: return LogLevel.WARN;
+  }
+};
+
+export const logger = new Logger(getLogLevelFromEnv());

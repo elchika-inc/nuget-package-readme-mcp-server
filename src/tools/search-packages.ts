@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { validateSearchQuery, validateLimit, validateScore } from '../utils/validators.js';
 import { cache, createCacheKey } from '../services/cache.js';
-import { nugetApi } from '../services/nuget-api.js';
+import { nugetApi } from '../services/nuget-unified-api.js';
 import type {
   SearchPackagesParams,
   SearchPackagesResponse,
@@ -100,14 +100,14 @@ export async function searchPackages(params: SearchPackagesParams): Promise<Sear
     // Create response
     const response: SearchPackagesResponse = {
       query,
-      total: filteredPackages.length,
+      total_count: filteredPackages.length,
       packages: filteredPackages,
     };
 
     // Cache the response (shorter TTL for search results)
     cache.set(cacheKey, response, 600000); // 10 minutes
 
-    logger.info(`Successfully searched packages: "${query}", found ${response.total} results`);
+    logger.info(`Successfully searched packages: "${query}", found ${response.total_count} results`);
     return response;
 
   } catch (error) {

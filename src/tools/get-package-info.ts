@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { validatePackageName } from '../utils/validators.js';
 import { cache, createCacheKey } from '../services/cache.js';
-import { nugetApi } from '../services/nuget-api.js';
+import { nugetApi } from '../services/nuget-unified-api.js';
 import type {
   GetPackageInfoParams,
   PackageInfoResponse,
@@ -42,7 +42,7 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
         authors: [],
         license: 'Unknown',
         tags: [],
-        dependencies: undefined,
+        dependencies: {},
         dev_dependencies: undefined,
         download_stats: {
           last_day: 0,
@@ -91,11 +91,10 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
     }
 
     // Prepare dependencies (NuGet dependencies structure is more complex)
-    let dependencies: Record<string, string> | undefined;
+    let dependencies: Record<string, string> = {};
     let devDependencies: Record<string, string> | undefined;
 
     if (include_dependencies && packageMetadata.package.metadata.dependencies) {
-      dependencies = {};
       
       // Handle different dependency group structures
       const depGroups = packageMetadata.package.metadata.dependencies;
@@ -103,8 +102,9 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
       if (depGroups.dependency) {
         // Simple dependency array
         for (const dep of depGroups.dependency) {
-          if (dep.$ && dep.$.id) {
-            dependencies[dep.$.id] = dep.$.version || '*';
+          const depWithAttrs = dep as any;
+          if (depWithAttrs.$ && depWithAttrs.$.id) {
+            dependencies[depWithAttrs.$.id] = depWithAttrs.$.version || '*';
           }
         }
       }
@@ -112,23 +112,22 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
       if (depGroups.group) {
         // Grouped dependencies by target framework
         for (const group of depGroups.group) {
-          if (group.dependency) {
-            for (const dep of group.dependency) {
-              if (dep.$ && dep.$.id) {
-                const key = group.$.targetFramework 
-                  ? `${dep.$.id} (${group.$.targetFramework})`
-                  : dep.$.id;
-                dependencies[key] = dep.$.version || '*';
+          const groupWithAttrs = group as any;
+          if (groupWithAttrs.dependency) {
+            for (const dep of groupWithAttrs.dependency) {
+              const depWithAttrs = dep as any;
+              if (depWithAttrs.$ && depWithAttrs.$.id) {
+                const key = groupWithAttrs.$.targetFramework 
+                  ? `${depWithAttrs.$.id} (${groupWithAttrs.$.targetFramework})`
+                  : depWithAttrs.$.id;
+                dependencies[key] = depWithAttrs.$.version || '*';
               }
             }
           }
         }
       }
       
-      // If no dependencies found, set to undefined
-      if (Object.keys(dependencies).length === 0) {
-        dependencies = undefined;
-      }
+      // Dependencies object is always present, might be empty
     }
 
     // NuGet doesn't typically have dev dependencies in the same way as npm
@@ -147,7 +146,7 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
       authors,
       license: packageMetadata.package.metadata.licenseExpression || 'Unknown',
       tags,
-      dependencies: dependencies || undefined,
+      dependencies: dependencies,
       dev_dependencies: devDependencies || undefined,
       download_stats: downloadStats,
       repository: repository || undefined,

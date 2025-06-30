@@ -83,7 +83,7 @@ export function validateLimit(limit: number): void {
 }
 
 export function validateScore(score: number, name: string): void {
-  if (typeof score !== 'number' || score < MIN_SCORE || score > MAX_SCORE) {
+  if (typeof score !== 'number' || !Number.isFinite(score) || score < MIN_SCORE || score > MAX_SCORE) {
     throw new PackageReadmeMcpError(`${name} must be a number between ${MIN_SCORE} and ${MAX_SCORE}`, 'INVALID_SCORE');
   }
 }

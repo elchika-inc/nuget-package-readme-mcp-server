@@ -1,86 +1,110 @@
-import type { NuSpecPackage } from '../types/index.js';
+import type { NuSpecPackage, NuGetEnhancedMetadata } from '../types/index.js';
 
 export class ReadmeGenerator {
-  static createEnhancedFallbackReadme(packageMetadata: NuSpecPackage, catalogEntry: any): string {
-    const metadata = packageMetadata.package.metadata;
+  static createEnhancedFallbackReadme(packageMetadata: NuSpecPackage, enhancedMetadata: NuGetEnhancedMetadata): string {
+    const packageInfo = packageMetadata.package.metadata;
     
-    let readme = `# ${metadata.title || metadata.id}\n\n`;
+    let readmeContent = `# ${packageInfo.title || packageInfo.id}\n\n`;
     
-    const description = catalogEntry.description || metadata.description;
-    if (description) {
-      readme += `${description}\n\n`;
+    const packageDescription = enhancedMetadata.description || packageInfo.description;
+    if (packageDescription) {
+      readmeContent += `${packageDescription}\n\n`;
     }
     
-    if (catalogEntry.summary && catalogEntry.summary !== description) {
-      readme += `## Summary\n\n${catalogEntry.summary}\n\n`;
+    if (enhancedMetadata.summary && enhancedMetadata.summary !== packageDescription) {
+      readmeContent += `## Summary\n\n${enhancedMetadata.summary}\n\n`;
     }
     
-    if (catalogEntry.releaseNotes) {
-      readme += `## Release Notes\n\n${catalogEntry.releaseNotes}\n\n`;
+    if (enhancedMetadata.releaseNotes) {
+      readmeContent += `## Release Notes\n\n${enhancedMetadata.releaseNotes}\n\n`;
     }
     
-    if (metadata.authors) {
-      readme += `**Authors:** ${metadata.authors}\n\n`;
+    if (packageInfo.authors) {
+      readmeContent += `**Authors:** ${packageInfo.authors}\n\n`;
     }
     
-    if (metadata.tags) {
-      const tags = metadata.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
-      if (tags.length > 0) {
-        readme += `**Tags:** ${tags.join(', ')}\n\n`;
+    if (packageInfo.tags) {
+      const parsedTags = packageInfo.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
+      if (parsedTags.length > 0) {
+        readmeContent += `**Tags:** ${parsedTags.join(', ')}\n\n`;
       }
     }
     
-    readme += `## Installation\n\n`;
-    readme += `\`\`\`bash\n`;
-    readme += `dotnet add package ${metadata.id}\n`;
-    readme += `\`\`\`\n\n`;
+    readmeContent += `## Installation\n\n`;
+    readmeContent += `\`\`\`bash\n`;
+    readmeContent += `dotnet add package ${packageInfo.id}\n`;
+    readmeContent += `\`\`\`\n\n`;
     
-    readme += `Or via Package Manager Console:\n\n`;
-    readme += `\`\`\`powershell\n`;
-    readme += `Install-Package ${metadata.id}\n`;
-    readme += `\`\`\`\n\n`;
+    readmeContent += `Or via Package Manager Console:\n\n`;
+    readmeContent += `\`\`\`powershell\n`;
+    readmeContent += `Install-Package ${packageInfo.id}\n`;
+    readmeContent += `\`\`\`\n\n`;
     
-    if (metadata.projectUrl) {
-      readme += `For more information, visit the [project page](${metadata.projectUrl}).\n\n`;
+    if (packageInfo.projectUrl) {
+      readmeContent += `**Project URL:** [${packageInfo.projectUrl}](${packageInfo.projectUrl})\n\n`;
     }
     
-    return readme;
+    if (packageInfo.licenseExpression || packageInfo.licenseUrl) {
+      const licenseText = packageInfo.licenseExpression || 'See license URL';
+      const licenseInfo = packageInfo.licenseUrl 
+        ? `[${licenseText}](${packageInfo.licenseUrl})`
+        : licenseText;
+      readmeContent += `**License:** ${licenseInfo}\n\n`;
+    }
+    
+    return readmeContent;
   }
 
   static createFallbackReadme(packageMetadata: NuSpecPackage): string {
-    const metadata = packageMetadata.package.metadata;
+    const packageInfo = packageMetadata.package.metadata;
     
-    let readme = `# ${metadata.title || metadata.id}\n\n`;
+    let readmeContent = `# ${packageInfo.title || packageInfo.id}\n\n`;
     
-    if (metadata.description) {
-      readme += `${metadata.description}\n\n`;
+    if (packageInfo.description) {
+      readmeContent += `${packageInfo.description}\n\n`;
     }
     
-    if (metadata.authors) {
-      readme += `**Authors:** ${metadata.authors}\n\n`;
+    readmeContent += `## Installation\n\n`;
+    readmeContent += `Install this package using one of the following methods:\n\n`;
+    
+    readmeContent += `### .NET CLI\n`;
+    readmeContent += `\`\`\`bash\n`;
+    readmeContent += `dotnet add package ${packageInfo.id}\n`;
+    readmeContent += `\`\`\`\n\n`;
+    
+    readmeContent += `### Package Manager Console\n`;
+    readmeContent += `\`\`\`powershell\n`;
+    readmeContent += `Install-Package ${packageInfo.id}\n`;
+    readmeContent += `\`\`\`\n\n`;
+    
+    readmeContent += `### PackageReference\n`;
+    readmeContent += `\`\`\`xml\n`;
+    readmeContent += `<PackageReference Include="${packageInfo.id}" Version="${packageInfo.version}" />\n`;
+    readmeContent += `\`\`\`\n\n`;
+    
+    if (packageInfo.authors) {
+      readmeContent += `**Authors:** ${packageInfo.authors}\n\n`;
     }
     
-    if (metadata.tags) {
-      const tags = metadata.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
-      if (tags.length > 0) {
-        readme += `**Tags:** ${tags.join(', ')}\n\n`;
+    if (packageInfo.tags) {
+      const parsedTags = packageInfo.tags.split(' ').filter((tag: string) => tag.trim().length > 0);
+      if (parsedTags.length > 0) {
+        readmeContent += `**Tags:** ${parsedTags.join(', ')}\n\n`;
       }
     }
     
-    readme += `## Installation\n\n`;
-    readme += `\`\`\`bash\n`;
-    readme += `dotnet add package ${metadata.id}\n`;
-    readme += `\`\`\`\n\n`;
-    
-    readme += `Or via Package Manager Console:\n\n`;
-    readme += `\`\`\`powershell\n`;
-    readme += `Install-Package ${metadata.id}\n`;
-    readme += `\`\`\`\n\n`;
-    
-    if (metadata.projectUrl) {
-      readme += `For more information, visit the [project page](${metadata.projectUrl}).\n\n`;
+    if (packageInfo.projectUrl) {
+      readmeContent += `**Project URL:** [${packageInfo.projectUrl}](${packageInfo.projectUrl})\n\n`;
     }
     
-    return readme;
+    if (packageInfo.licenseExpression || packageInfo.licenseUrl) {
+      const licenseText = packageInfo.licenseExpression || 'See license URL';
+      const licenseInfo = packageInfo.licenseUrl 
+        ? `[${licenseText}](${packageInfo.licenseUrl})`
+        : licenseText;
+      readmeContent += `**License:** ${licenseInfo}\n\n`;
+    }
+    
+    return readmeContent;
   }
 }

@@ -6,6 +6,13 @@ import {
 import { getPackageReadme } from './tools/get-package-readme.js';
 import { getPackageInfo } from './tools/get-package-info.js';
 import { searchPackages } from './tools/search-packages.js';
+import {
+  validateArgs,
+  validateRequiredString,
+  validateOptionalString,
+  validateOptionalBoolean,
+  validateOptionalNumber,
+} from './utils/validation-helper.js';
 import type {
   GetPackageReadmeParams,
   GetPackageInfoParams,
@@ -148,75 +155,45 @@ export class NuGetPackageReadmeMcpServer extends BasePackageServer {
   }
 
   private validateGetPackageReadmeParams(args: unknown): GetPackageReadmeParams {
-    if (!args || typeof args !== 'object') {
-      throw new PackageReadmeMcpError('Tool arguments must be an object', 'VALIDATION_ERROR');
-    }
-    
-    const params = args as Record<string, unknown>;
-    
-    if (!params.package_name || typeof params.package_name !== 'string') {
-      throw new PackageReadmeMcpError('package_name is required and must be a string', 'VALIDATION_ERROR');
-    }
+    const params = validateArgs(args);
     
     return {
-      package_name: params.package_name,
-      version: typeof params.version === 'string' ? params.version : 'latest',
-      include_examples: typeof params.include_examples === 'boolean' ? params.include_examples : true,
+      package_name: validateRequiredString(params.package_name, 'package_name'),
+      version: validateOptionalString(params.version, 'latest'),
+      include_examples: validateOptionalBoolean(params.include_examples, true),
     };
   }
 
   private validateGetPackageInfoParams(args: unknown): GetPackageInfoParams {
-    if (!args || typeof args !== 'object') {
-      throw new PackageReadmeMcpError('Tool arguments must be an object', 'VALIDATION_ERROR');
-    }
-    
-    const params = args as Record<string, unknown>;
-    
-    if (!params.package_name || typeof params.package_name !== 'string') {
-      throw new PackageReadmeMcpError('package_name is required and must be a string', 'VALIDATION_ERROR');
-    }
+    const params = validateArgs(args);
     
     return {
-      package_name: params.package_name,
-      include_dependencies: typeof params.include_dependencies === 'boolean' ? params.include_dependencies : true,
-      include_dev_dependencies: typeof params.include_dev_dependencies === 'boolean' ? params.include_dev_dependencies : false,
+      package_name: validateRequiredString(params.package_name, 'package_name'),
+      include_dependencies: validateOptionalBoolean(params.include_dependencies, true),
+      include_dev_dependencies: validateOptionalBoolean(params.include_dev_dependencies, false),
     };
   }
 
   private validateSearchPackagesParams(args: unknown): SearchPackagesParams {
-    if (!args || typeof args !== 'object') {
-      throw new PackageReadmeMcpError('Tool arguments must be an object', 'VALIDATION_ERROR');
-    }
-    
-    const params = args as Record<string, unknown>;
-    
-    if (!params.query || typeof params.query !== 'string') {
-      throw new PackageReadmeMcpError('query is required and must be a string', 'VALIDATION_ERROR');
-    }
+    const params = validateArgs(args);
     
     const result: SearchPackagesParams = {
-      query: params.query,
+      query: validateRequiredString(params.query, 'query'),
     };
     
-    if (params.limit !== undefined) {
-      if (typeof params.limit !== 'number' || params.limit < 1 || params.limit > 250) {
-        throw new PackageReadmeMcpError('limit must be a number between 1 and 250', 'VALIDATION_ERROR');
-      }
-      result.limit = params.limit;
+    const limit = validateOptionalNumber(params.limit, 1, 250, 'limit');
+    if (limit !== undefined) {
+      result.limit = limit;
     }
     
-    if (params.quality !== undefined) {
-      if (typeof params.quality !== 'number' || params.quality < 0 || params.quality > 1) {
-        throw new PackageReadmeMcpError('quality must be a number between 0 and 1', 'VALIDATION_ERROR');
-      }
-      result.quality = params.quality;
+    const quality = validateOptionalNumber(params.quality, 0, 1, 'quality');
+    if (quality !== undefined) {
+      result.quality = quality;
     }
     
-    if (params.popularity !== undefined) {
-      if (typeof params.popularity !== 'number' || params.popularity < 0 || params.popularity > 1) {
-        throw new PackageReadmeMcpError('popularity must be a number between 0 and 1', 'VALIDATION_ERROR');
-      }
-      result.popularity = params.popularity;
+    const popularity = validateOptionalNumber(params.popularity, 0, 1, 'popularity');
+    if (popularity !== undefined) {
+      result.popularity = popularity;
     }
     
     return result;
